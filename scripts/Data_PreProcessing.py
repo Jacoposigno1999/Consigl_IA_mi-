@@ -5,14 +5,7 @@ from langchain.prompts import ChatPromptTemplate
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM 
 from typing import List, Dict
-
-#==
-#Loading data
-#==
-path = "c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\data\\raw\\Barcelona_reviews.csv"
-raw_data = pd.read_csv(path)
-
-row = raw_data.iloc[24960]['review_full']
+from pymongo import MongoClient
 
 
 class ABSA_expert:
@@ -71,16 +64,44 @@ class ABSA_expert:
         return self._parse_output(decoded)
     
     #PER ORA I DATI ARRIVANO DA EXCELL QUINDI LI CARICO COME UN PANDAS DF, SUCCESSIVAMENTE ARRIVERANNO DA UN MONGO-DB
-    def analyze_dataset(self, df: pd.DataFrame, text_column: str = "review_full") -> pd.DataFrame:
+    def analyze_dataset(self, df: pd.DataFrame, text_column: str = "review_full",
+                        mongo_uri: str =  "mongodb://localhost:27017", db_name: str = "Reviews",
+                        collection_name: str = "Barcelona", batch_size: int = 5000,
+                        upload_to_mongo: bool = True) -> pd.DataFrame:
+        
+        if upload_to_mongo: 
+            client = MongoClient(mongo_uri)
+            collection = client[db_name][collection_name]
+        
         all_aspects = []
+        buffer = [] #buffer of observations to be loaded in batch to MongoDB
 
         for idx, row in df.iterrows():
             review = row[text_column]
             aspects = self.analyze_review(review)
+            row_dict = row.to_dict()
+            row_dict["aspects"] = aspects
+            buffer.append(row_dict)
             all_aspects.append(aspects)
 
             if idx % 50 == 0:
                 print(f"Processed {idx+1}/{len(df)} reviews...")
+                
+            if (idx + 1) % batch_size == 0 and upload_to_mongo:
+                try: 
+                    collection.insert_many(buffer)
+                    print(f"✅ Uploaded batch of {len(buffer)} reviews at index {idx + 1}")
+                except Exception as e:
+                    print(f"⚠️ Failed to upload batch: {e}")
+                buffer = []
+                
+           # Upload remaining items
+            if buffer and upload_to_mongo:
+                try:
+                    collection.insert_many(buffer)
+                    print(f"✅ Uploaded final batch of {len(buffer)} reviews.")
+                except Exception as e:
+                    print(f"⚠️ Failed to upload batch: {e}")
 
         df["aspects"] = all_aspects  
         return df
