@@ -81,6 +81,7 @@ class ABSA_expert:
             aspects = self.analyze_review(review)
             row_dict = row.to_dict()
             row_dict["aspects"] = aspects
+            row_dict["aspect_keys"] = list(aspects.keys())
             buffer.append(row_dict)
             all_aspects.append(aspects)
 
@@ -95,13 +96,13 @@ class ABSA_expert:
                     print(f"⚠️ Failed to upload batch: {e}")
                 buffer = []
                 
-           # Upload remaining items
-            if buffer and upload_to_mongo:
-                try:
-                    collection.insert_many(buffer)
-                    print(f"✅ Uploaded final batch of {len(buffer)} reviews.")
-                except Exception as e:
-                    print(f"⚠️ Failed to upload batch: {e}")
+        # Upload remaining items
+        if buffer and upload_to_mongo:
+            try:
+                collection.insert_many(buffer)
+                print(f"✅ Uploaded final batch of {len(buffer)} reviews.")
+            except Exception as e:
+                print(f"⚠️ Failed to upload batch: {e}")
 
         df["aspects"] = all_aspects  
         return df
