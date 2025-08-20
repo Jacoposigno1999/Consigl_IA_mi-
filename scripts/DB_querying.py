@@ -90,13 +90,22 @@ class RestaurantRecommender:
       # Add other usefull metadata to the retrived informations 
       # For now just add a score to the information retrived
       # =========================
-      #Counting how many times a resturant is present the query results
-      resturant_apparence = Counter(doc['restaurant_name'] for doc in results) 
+      # Step 1: Count how many times each restaurant appears
+      restaurant_counts = Counter(doc['restaurant_name'] for doc in results)
 
-      enriched_results = [
-        {**doc, 'review_count': [resturant_apparence[doc["restaurant_name"]]]} for doc in results 
-        ]
-      return enriched_results
+      # Step 2: Keep only one doc per restaurant, we are only interested in Restaurant name and Review count 
+      seen = set()
+      enriched = []
+
+      for doc in results:
+          name = doc['restaurant_name']
+          if name not in seen:
+              seen.add(name)
+              enriched_doc = {**doc, 'review_count': restaurant_counts[name]}
+              enriched.append(enriched_doc)
+
+      return enriched
+
 
 
     def get_top_restaurants(self, enriched_results: List[dict], top_k: int = 4) -> List[str]:
@@ -112,7 +121,7 @@ class RestaurantRecommender:
           top_resturants.append(doc["restaurant_name"])
         if len(top_resturants) > 4:
           return top_resturants;
-        return top_resturants
+      return top_resturants
         
 
     def fetch_full_reviews(self, top_restaurants: List[str]) -> List[Dict]:
