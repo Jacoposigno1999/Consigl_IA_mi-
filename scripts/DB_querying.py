@@ -3,6 +3,7 @@ from langchain_ollama.llms import OllamaLLM
 from langchain.prompts import ChatPromptTemplate
 from typing import List, Dict, Any
 from collections import Counter
+from pymongo import MongoClient
 
 class RestaurantRecommender:
     def __init__(self, db_name, collection_name, model_name):
@@ -11,16 +12,19 @@ class RestaurantRecommender:
 
       # MongoDB setup
       try:
-          self.conn = MongoClient("localhost", 27017)
+          self.conn = MongoClient("localhost", 27017)  #client = MongoClient("mongodb://localhost:27017")
           print("✅ MongoDB connected.")
       except Exception as e:
-          raise ConnectionError("Could not connect to MongoDB:", e)
+          raise ConnectionError(f"Could not connect to MongoDB: {e}")
 
       self.db = self.conn[db_name]
       self.collection = self.db[collection_name]
     
         
     def parse_query(self, user_input: str) -> dict:
+      #==========================================================================
+      # From user query to a dictionary with the information to look for in the DB
+      #==========================================================================
       PROMPT_TEMPLATE = '''
             You are a NLP expert, your objective is to extract the main food item, special preferences, 
             and sentiment criteria from the query: 
@@ -40,7 +44,7 @@ class RestaurantRecommender:
               do not print something like 'Base on the query..." or other notes
             '''
       prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
-      prompt = prompt_template.format(query = request)      
+      prompt = prompt_template.format(query = user_input)      
       output = self.model.invoke(prompt)
       return ast.literal_eval(output) #convert a string into a dict
       
@@ -66,16 +70,17 @@ class RestaurantRecommender:
       return query  
 
  
-    def query_reviews(self, mongo_query: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def query_reviews(self, mongo_query: Dict[str, Any], print_info: bool = False) -> List[Dict[str, Any]]:
       
       # Run it
       results = list(self.collection.find(mongo_query))
-      print(f"✅ Found {collection.count_documents(mongo_query)} matching documents.")
-      print("🔍 Showing up to 5 sample results:\n")
-      for doc in results:
-        print(f"🍽️ Restaurant: {doc.get('restaurant_name')}")
-        print(f"📝 Aspects: {doc.get('aspect_keys')}")
-        print()  
+      if print_info: 
+        print(f"✅ Found {results.count_documents(mongo_query)} matching documents.")
+        print("🔍 Showing up to 5 sample results:\n")
+        for doc in results:
+          print(f"🍽️ Restaurant: {doc.get('restaurant_name')}")
+          print(f"📝 Aspects: {doc.get('aspect_keys')}")
+          print()  
         
       return results
         
@@ -94,123 +99,54 @@ class RestaurantRecommender:
       return enriched_results
 
 
-    def get_top_restaurants(self, enriched: List[dict], top_k: int = 4) -> List[str]:
-        ...
+    def get_top_restaurants(self, enriched_results: List[dict], top_k: int = 4) -> List[str]:
+      # ====================
+      # Select top resturants (the one with highest review_count and retrive all the information(all the reviews))
+      # ====================
 
-    def fetch_full_reviews(self, restaurant_names: List[str]) -> List[dict]:
-        ...
+      enriched_results.sort(key = lambda doc: doc['review_count'], reverse= True )
 
+      top_resturants = []
+      for doc in enriched_results:
+        if doc['restaurant_name'] not in top_resturants:
+          top_resturants.append(doc["restaurant_name"])
+        if len(top_resturants) > 4:
+          return top_resturants;
+        return top_resturants
+        
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#================
-# This script translate the user query into ad MongoDB query, in order to 
-# retrive information from the MongoDB database
-#================ 
-
-
-#==========================================================================
-# From user query to a dictionary with the information to look for in the DB
-#==========================================================================
-request = input("Hello what you would like to eat?")
-
-
-PROMPT_TEMPLATE = '''
-You are a NLP expert, your objective is to extract the main food item, special preferences, 
-and sentiment criteria from the query: 
-{query}.
-
-<expected output>
-{{
-  "food_item": [],
-  "preferences": [],
-  "aspects": []
-}}
-<\expected output>
-
-Notice: 
-- If some of the fields are not explicitly mentioned, don't include them in the dictionary 
-- Do non return anything else apart what explicitelly asked in <expected output>, 
-  do not print something like 'Base on the query..." or other notes
-'''
-prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
-prompt = prompt_template.format(query = request)
-
-model = OllamaLLM(model="llama3:8b")
-info = model.invoke(prompt)
-info = ast.literal_eval(info) #convert a string into a dict
-
-print(info)
-
-
-#=======================
-# Query the database based on the infos
-#=======================
-from pymongo import MongoClient
-
-try:
-    conn = MongoClient("localhost", 27017)
-    print("Connected successfully!")
-except Exception as e:
-    print("Could not connect to MongoDB:", e)
-    
-db = conn["Reviews"]
-collection = db["Barcelona"] 
-
-# Build the query
-mongo_query = {
-    "aspect": {"$in": info['food_item']}
-}
-
-# Execute the query
-results = list(collection.find(mongo_query))
-
-    
+    def fetch_full_reviews(self, top_restaurants: List[str]) -> List[Dict]:
+        if not top_restaurants:
+          print("⛔ No top resturants found")
+          return []
+        
+        query = {"restaurant_name": {"$in": top_restaurants}}
+        return list(self.collection.find(query))
 
 
 
 
-# ====================
-# Select top resturants (the what with highest review_count and retrive all the information(all the reviews))
-# ====================
 
-enriched_results.sort(key = lambda doc: doc['review_count'], reverse= True )
 
-top_resturants = []
-for doc in enriched_results:
-  if doc['restaurant_name'] not in top_resturants:
-    top_resturants.append(doc["restaurant_name"])
-  if len(top_resturants) > 4:
-    break;
+
+
+
+
+
+
+
+
+
+
+
+
+
+if __name__ == "__main__":
+
+
+  request = input("Hello what you would like to eat?")
+
+
   
-
-query = {
-  "resturant_name":{"$in": top_resturants}
-}
-    
-top_rest_info = collection.find(mongo_query)
-
-unique_review_id = top_rest_info.distinct('review_id')
-
-query = {
-  "resturant_name":{"$in": top_resturants},
-   "review_id" : {"$in": unique_review_id }
-}
-top_rest_info = list(collection.find(mongo_query))
-
-
 
 
