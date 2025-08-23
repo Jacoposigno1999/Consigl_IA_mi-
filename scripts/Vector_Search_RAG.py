@@ -1,8 +1,13 @@
 from langchain.vectorstores import FAISS
 from langchain.schema import Document
-from langchain.embeddings import HuggingFaceEmbeddings
+#from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from typing import List
 import os
+from langchain.prompts import PromptTemplate
+from langchain.chains import RetrievalQA
+from langchain_ollama.llms import OllamaLLM
+
 
 class SemanticReviewSearcher:
     def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2", index_path: str = "data/faiss_vector_DB"):
@@ -23,8 +28,9 @@ class SemanticReviewSearcher:
         ]
 
         self.vectorstore = FAISS.from_documents(docs, self.embedding_model)
-        self.vectorstore.save_local(self.index_path)
-        print(f"✅ Index saved at: {self.index_path}")
+        print(f"✅ In-memory FAISS index built with {len(docs)} documents.")
+        #self.vectorstore.save_local(self.index_path)
+        #print(f"✅ Index saved at: {self.index_path}")
 
     def load_index(self):
         """Load a previously saved FAISS index"""
@@ -34,36 +40,42 @@ class SemanticReviewSearcher:
         self.vectorstore = FAISS.load_local(self.index_path, embeddings=self.embedding_model)
         print(f"✅ Loaded FAISS index from {self.index_path}")
 
-    def search(self, query: str, k: int = 3):
+    def search(self, query: str, k: int = 3) -> List[Document]:
         """Run semantic search on the loaded vector DB"""
         if not self.vectorstore:
             raise RuntimeError("Vector index not loaded. Call load_index() first.")
 
         print(f"🔍 Semantic search for: {query}")
         results = self.vectorstore.similarity_search(query, k=k)
-        return results #What type is this? I think List[Dict]
+        return results 
     
-    def run_rag(self, retrived_reviews: List[dict], query: str, content_field: str = "review_full") -> str:
+    def run_rag(self, retrived_reviews: List[dict], query: str, content_field: str = "review_full", model: str = "llama3:8b") -> str:
+        #================
+        # This methon run a RAG on all the embeded reviews 
+        # previously filtered based on aspects_keys
+        #================
         """Perform a semantic RAG over the filtered reviews"""
         if not retrived_reviews:
             return "⛔ No reviews to perform RAG on."
 
         # Step 1: Convert reviews to LangChain Documents
-        docs = [
+        '''docs = [
             Document(page_content=doc[content_field], metadata=doc)
             for doc in retrived_reviews if content_field in doc
-        ]
+        ]'''
 
-        if not docs:
+        if not self.vectorstore:
             return "⛔ No valid review content to use in RAG."
 
-        # Step 2: Build temporary FAISS vector store
-        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        vectorstore = FAISS.from_documents(docs, embeddings)
-        retriever = vectorstore.as_retriever()
+        # 1. Retrieve ALL embedded docs
+        docs = list(self.vectorstore.docstore._dict.values())
+        # 2. Build the context
+        max_chars = 100000
+        context = "\n\n".join([doc.page_content for doc in docs])
+        context = context[:max_chars]
 
         # Step 3: Define custom prompt
-        prompt = PromptTemplate.from_template("""
+        prompt_template  = PromptTemplate.from_template("""
         You are a food expert helping users find restaurants based on their preferences.
 
         Use ONLY the following restaurant reviews to answer the user's request.
@@ -76,12 +88,37 @@ class SemanticReviewSearcher:
         Answer:
         """)
 
-        # Step 4: Build and run the RAG chain
-        rag_chain = RetrievalQA.from_chain_type(
-            llm=self.model,
-            retriever=retriever,
-            chain_type="stuff",
-            chain_type_kwargs={"prompt": prompt}
-        )
+        # Step 4: Format the prompt
+        prompt = prompt_template.format(context=context, question=query)
 
-        return rag_chain.run(query)
+        llm = OllamaLLM(model=model)
+        
+        # Step 5: Get answer from the LLM
+        response = llm.invoke(prompt)
+
+        return response
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
