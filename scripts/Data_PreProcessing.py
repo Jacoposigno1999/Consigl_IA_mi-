@@ -55,8 +55,8 @@ class ABSA_expert:
         
     def analyze_review(self, review: str) -> Dict[str, str]:
         prompt = self._build_prompt(review)
-        inputs = self.tokenizer(prompt, return_tensors="pt")#.to(self.device)#tokenized_test
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        inputs = self.tokenizer(prompt, return_tensors="pt")#convert a string prompt into numerical tensors that the model can understand.
+        inputs = {k: v.to(self.device) for k, v in inputs.items()} #Moves them to GPU if available (or CPU otherwise).
 
         with torch.no_grad():
             outputs = self.model.generate(inputs["input_ids"])# se da errore prova: inputs.input_ids
