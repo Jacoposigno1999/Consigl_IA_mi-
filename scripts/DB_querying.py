@@ -123,14 +123,22 @@ class RestaurantRecommender:
           return top_resturants;
       return top_resturants
         
-
-    def fetch_full_reviews(self, top_restaurants: List[str]) -> List[Dict]:
-        if not top_restaurants:
-          print("⛔ No top resturants found")
+    def fetch_full_reviews(self, top_restaurants: List[Dict]) -> List[Dict]:
+      if not top_restaurants:
+          print("⛔ No top restaurants found")
           return []
-        
-        query = {"restaurant_name": {"$in": top_restaurants}}
-        return list(self.collection.find(query))
+      
+      # Extract only the restaurant names as a list of strings
+      restaurant_names = [rest["restaurant_name"] for rest in top_restaurants if "restaurant_name" in rest]
+      print(f'🏆 Top resturnats found: {restaurant_names}')
+
+      # Build the MongoDB query
+      query = {"restaurant_name": {"$in": restaurant_names}}
+      retrived_information = list(self.collection.find(query))
+      print (f'Retrived {len(retrived_information)} reviews from the most relevant restaurants')
+
+      return retrived_information, restaurant_names
+
 
 
 

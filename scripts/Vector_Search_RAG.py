@@ -32,6 +32,7 @@ class SemanticReviewSearcher:
         #self.vectorstore.save_local(self.index_path)
         #print(f"✅ Index saved at: {self.index_path}")
 
+    "Not needed if you don't want to keep the vector DB in memory (I think)"
     def load_index(self):
         """Load a previously saved FAISS index"""
         if not os.path.exists(self.index_path):
@@ -40,6 +41,7 @@ class SemanticReviewSearcher:
         self.vectorstore = FAISS.load_local(self.index_path, embeddings=self.embedding_model)
         print(f"✅ Loaded FAISS index from {self.index_path}")
 
+    "Not needed since we want to retrive all the reviews in the Vector DB"
     def search(self, query: str, k: int = 3) -> List[Document]:
         """Run semantic search on the loaded vector DB"""
         if not self.vectorstore:
@@ -49,7 +51,7 @@ class SemanticReviewSearcher:
         results = self.vectorstore.similarity_search(query, k=k)
         return results 
     
-    def run_rag(self, retrived_reviews: List[dict], query: str, content_field: str = "review_full", model: str = "llama3:8b") -> str:
+    def run_rag(self, top_restaurants: List[str], retrived_reviews: List[dict], query: str, content_field: str = "review_full", model: str = "llama3:8b") -> str:
         #================
         # This methon run a RAG on all the embeded reviews 
         # previously filtered based on aspects_keys
@@ -57,12 +59,6 @@ class SemanticReviewSearcher:
         """Perform a semantic RAG over the filtered reviews"""
         if not retrived_reviews:
             return "⛔ No reviews to perform RAG on."
-
-        # Step 1: Convert reviews to LangChain Documents
-        '''docs = [
-            Document(page_content=doc[content_field], metadata=doc)
-            for doc in retrived_reviews if content_field in doc
-        ]'''
 
         if not self.vectorstore:
             return "⛔ No valid review content to use in RAG."
@@ -76,20 +72,27 @@ class SemanticReviewSearcher:
 
         # Step 3: Define custom prompt
         prompt_template  = PromptTemplate.from_template("""
-        You are a food expert helping users find restaurants based on their preferences.
+            You are a food expert helping users find the best restaurants based on detailed customer reviews.
 
-        Use ONLY the following restaurant reviews to answer the user's request.
-        If the reviews are insufficient to answer, say: "I don’t have enough information."
+            Use ONLY the following restaurant reviews as context for your answer.
 
-        Context:
-        {context}
+            Recommend **{first_option}** as the top choice. Clearly explain why this restaurant stands out using the reviews provided.
 
-        User query: {question}
-        Answer:
-        """)
+            Then, suggest these other valid alternatives: **{alternatives}**.
+            Briefly compare them to the first option, highlighting what is better or worse based on the context.
+
+            If the reviews are insufficient to answer, say: "I don’t have enough information."
+
+            Context:
+            {context}
+
+            User query: {question}
+
+            Answer:
+            """)
 
         # Step 4: Format the prompt
-        prompt = prompt_template.format(context=context, question=query)
+        prompt = prompt_template.format(first_option = top_restaurants[0], alternatives = top_restaurants[1:], context=context, question=query)
 
         llm = OllamaLLM(model=model)
         
