@@ -8,6 +8,7 @@ from typing import List, Dict
 from pymongo import MongoClient
 
 
+
 class ABSA_expert:
     def __init__(self, tokenizer: str, model: str , device: str = None ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -107,11 +108,11 @@ class ABSA_expert:
         df["aspects"] = all_aspects  
         return df
 
-    
+''' 
 #Sanity check 
 analyzer = ABSA_expert("Iceland/pyabsa-v3-onlyRest", "Iceland/pyabsa-v3-onlyRest")
 print(analyzer.analyze_review("The pizza was amazing and the waiter was rude."))       
-
+'''
 
 if __name__ == "__main__":
     analyzer = ABSA_expert("Iceland/pyabsa-v3-onlyRest", "Iceland/pyabsa-v3-onlyRest")  
@@ -120,7 +121,6 @@ if __name__ == "__main__":
     test_data = raw_data.head(100)
     df_with_aspects = analyzer.analyze_dataset(test_data)
 
-print(df_with_aspects.head())
 
 
 

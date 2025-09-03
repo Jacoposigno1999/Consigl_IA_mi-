@@ -9,6 +9,7 @@ import json
 from typing import List, Dict
 from Data_PreProcessing import ABSA_expert
 import re
+import ast
 
 
 load_dotenv()
@@ -147,9 +148,7 @@ class Expert_Model_Labeler():
 #==========================================================     
 # Class to test different models on the same beanchmark df 
 #==========================================================          
-class Challenger_model():
-    def __init__(self):
-        pass
+
 
 
 class Model_Eval():
@@ -157,10 +156,10 @@ class Model_Eval():
         self.embedding_model = SentenceTransformer(embedding_model)
 
 
-    def is_semantic_match(self, a1, a2, threshold: float ) -> bool:
+    def is_semantic_match(self, model_list, labeled_list, threshold: float ) -> bool:
         """Returns True if a1 and a2 are semantically similar above threshold."""
-        emb1 = self.embedding_model.encode(a1, convert_to_tensor=True)
-        emb2 = self.embedding_model.encode(a2, convert_to_tensor=True)
+        emb1 = self.embedding_model.encode(model_list, convert_to_tensor=True)
+        emb2 = self.embedding_model.encode(labeled_list, convert_to_tensor=True)
         return util.pytorch_cos_sim(emb1, emb2).item() >= threshold
     
     
@@ -204,14 +203,37 @@ class Model_Eval():
                 "f1_score": f1
             })
 
-        return pd.DataFrame(results)
+        results = pd.DataFrame(results)
+
+        avg_precision = results["precision"].mean()
+        avg_recall = results["recall"].mean()
+        avg_f1 = results["f1_score"].mean()
+        print(f"\n📊 Average Precision: {avg_precision:.3f}, Recall: {avg_recall:.3f}, F1: {avg_f1:.3f}")
+       
+        return results
+
+
+
+#=======================
+#Functiond that trasform a df column containing dictionary to a list of dict
+#=======================
+def col_to_list(df: pd.DataFrame, col_name: str) -> List[Dict]:
+    return df[col_name].tolist()
+    
+    
+
+
 
 
 if __name__ == "__main__":
     
-    Challenger  =  ABSA_expert("Iceland/pyabsa-v3-onlyRest", "Iceland/pyabsa-v3-onlyRest")  
+    Challenger  =  ABSA_expert("Iceland/pyabsa-v3-onlyRest", "Iceland/pyabsa-v3-onlyRest") 
+    Challenger_df =  Challenger.analyze_dataset(benchmark_data, upload_to_mongo = False) 
+    Challenger_list = col_to_list(Challenger_df, 'aspects')
 
-
-# Run the evaluation
-df_evaluation = evaluate_absa(gpt_outputs, model_outputs)
-import caas_jupyter_tools as cjtools; cjtools.display_dataframe_to_user(name="ABSA Evaluation Report", dataframe=df_evaluation)
+    Labeled_df = pd.read_csv("c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\data\\processed\\labeled_data.csv")
+    Labeled_df["aspects"] = Labeled_df["aspects"].apply(lambda x: ast.literal_eval(x) if pd.notnull(x) else {})#needed otherwise it upload 'aspects' as strings
+    Labeled_list = col_to_list(Labeled_df, 'aspects')
+    
+    Evaluator = Model_Eval()
+    Eval_results = Evaluator.evaluate_absa(Labeled_list, Challenger_list )
