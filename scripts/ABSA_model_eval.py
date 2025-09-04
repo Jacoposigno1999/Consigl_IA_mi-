@@ -16,8 +16,8 @@ load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
 #==========================================================================
-# Thsi code is use to test the performance of simple LM in performing ABSA
-# As 'silver standard" we will use a datased labeled by ChatGPT-o4 
+# This script is use to test the performance of simple LM in performing ABSA
+# As "silver standard" we will use a datased labeled by ChatGPT-o4 
 #==========================================================================
 path = "c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\data\\raw\\Barcelona_reviews.csv"
 raw_data = pd.read_csv(path)
@@ -144,19 +144,18 @@ class Expert_Model_Labeler():
             print(f"[✔] Checkpoint saved to: {path}")
         except Exception as e:
             print(f"[✘] Failed to save checkpoint: {e}")
+      
+      
             
 #==========================================================     
 # Class to test different models on the same beanchmark df 
 #==========================================================          
-
-
-
 class Model_Eval():
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
         self.embedding_model = SentenceTransformer(embedding_model)
 
 
-    def is_semantic_match(self, model_list, labeled_list, threshold: float ) -> bool:
+    def is_semantic_match(self, model_list: str, labeled_list: str, threshold: float ) -> bool:
         """Returns True if a1 and a2 are semantically similar above threshold."""
         emb1 = self.embedding_model.encode(model_list, convert_to_tensor=True)
         emb2 = self.embedding_model.encode(labeled_list, convert_to_tensor=True)
@@ -169,6 +168,7 @@ class Model_Eval():
         results = []
 
         for idx, (gpt_out, model_out) in enumerate(zip(gpt_outputs, model_outputs)):
+            #Dictionary Level 
             gpt_items = list(gpt_out.items())
             model_items = list(model_out.items())
 
@@ -176,18 +176,21 @@ class Model_Eval():
             sentiment_mismatches = []
             unmatched = []
 
-            for m_aspect, m_sentiment in model_items:
+
+            for g_aspect, g_sentiment in gpt_items:
+                #Key : Value Level 
                 found_match = False
-                for g_aspect, g_sentiment in gpt_items:
-                    if self.is_semantic_match(m_aspect, g_aspect, threshold):
+                for m_aspect, m_sentiment in model_items:
+                    if self.is_semantic_match(g_aspect, m_aspect, threshold):
                         found_match = True
                         if  m_sentiment.lower() == g_sentiment.lower():
                             matched.append((m_aspect, m_sentiment))
                         else:
                             sentiment_mismatches.append((m_aspect, m_sentiment, g_sentiment))
                         break
-                if not found_match:
-                    unmatched.append((m_aspect, m_sentiment))
+                if  found_match == False:
+                    unmatched.append((g_aspect, g_sentiment))
+
 
             precision = len(matched) / len(model_items) if model_items else 0
             recall = len(matched) / len(gpt_items) if gpt_items else 0
@@ -195,25 +198,43 @@ class Model_Eval():
 
             results.append({
                 "review_index": idx,
+                "Expert_Label": gpt_items,
+                "Model_Prediction":  model_items,
                 "matched": matched,
-                "sentiment_mismatches": sentiment_mismatches,
                 "unmatched": unmatched,
+                "sentiment_mismatches": sentiment_mismatches,
                 "precision": precision,
                 "recall": recall,
                 "f1_score": f1
             })
 
-        results = pd.DataFrame(results)
+        results_df = pd.DataFrame(results)
+        return results_df
 
-        avg_precision = results["precision"].mean()
-        avg_recall = results["recall"].mean()
-        avg_f1 = results["f1_score"].mean()
+
+    def save_evaluation_report(self, report_path: str, results_df: pd.DataFrame) -> None:
+        
+        avg_precision = results_df["precision"].mean()
+        avg_recall = results_df["recall"].mean()
+        avg_f1 = results_df["f1_score"].mean()
+        summary_df = pd.DataFrame([{
+                "avg_precision": avg_precision,
+                "avg_recall": avg_recall,
+                "avg_f1_score": avg_f1
+            }])
+        
+        
         print(f"\n📊 Average Precision: {avg_precision:.3f}, Recall: {avg_recall:.3f}, F1: {avg_f1:.3f}")
+        
+        
+        with pd.ExcelWriter(report_path, engine='openpyxl', mode='w') as writer:
+            results_df.to_excel(writer, sheet_name="Evaluation", index=False)
+            summary_df.to_excel(writer, sheet_name="Summary", index=False)
+            
+        print(f"✅ Report successfully saved to: {report_path}")
+
+    
        
-        return results
-
-
-
 #=======================
 #Functiond that trasform a df column containing dictionary to a list of dict
 #=======================
@@ -221,14 +242,14 @@ def col_to_list(df: pd.DataFrame, col_name: str) -> List[Dict]:
     return df[col_name].tolist()
     
     
-
-
-
-
 if __name__ == "__main__":
     
     Challenger  =  ABSA_expert("Iceland/pyabsa-v3-onlyRest", "Iceland/pyabsa-v3-onlyRest") 
     Challenger_df =  Challenger.analyze_dataset(benchmark_data, upload_to_mongo = False) 
+    model_name = "Iceland_pyabsa-v3-onlyRest"
+    path = f'c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\data\\processed\\{model_name}_challenger_data.csv'
+    Challenger_df.to_csv(path, index=False)
+    
     Challenger_list = col_to_list(Challenger_df, 'aspects')
 
     Labeled_df = pd.read_csv("c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\data\\processed\\labeled_data.csv")
@@ -237,3 +258,8 @@ if __name__ == "__main__":
     
     Evaluator = Model_Eval()
     Eval_results = Evaluator.evaluate_absa(Labeled_list, Challenger_list )
+    
+    report_path = f"c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\reports\\Models_eval\\{model_name}_eval_results.xlsx"
+    
+    Evaluator.save_evaluation_report(report_path,Eval_results )
+    
