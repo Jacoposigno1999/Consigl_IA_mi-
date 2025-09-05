@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import os
 import json
 from typing import List, Dict
-from Data_PreProcessing import ABSA_expert
+from scripts.Data_PreProcessing import ABSA_expert
 import re
 import ast
 
@@ -169,18 +169,18 @@ class Model_Eval():
 
         for idx, (gpt_out, model_out) in enumerate(zip(gpt_outputs, model_outputs)):
             #Dictionary Level 
-            gpt_items = list(gpt_out.items())
-            model_items = list(model_out.items())
+            gpt_labeled = list(gpt_out.items())
+            model_prediction = list(model_out.items())
 
             matched = []
             sentiment_mismatches = []
             unmatched = []
 
 
-            for g_aspect, g_sentiment in gpt_items:
+            for g_aspect, g_sentiment in gpt_labeled:
                 #Key : Value Level 
                 found_match = False
-                for m_aspect, m_sentiment in model_items:
+                for m_aspect, m_sentiment in model_prediction:
                     if self.is_semantic_match(g_aspect, m_aspect, threshold):
                         found_match = True
                         if  m_sentiment.lower() == g_sentiment.lower():
@@ -192,14 +192,14 @@ class Model_Eval():
                     unmatched.append((g_aspect, g_sentiment))
 
 
-            precision = len(matched) / len(model_items) if model_items else 0
-            recall = len(matched) / len(gpt_items) if gpt_items else 0
+            precision = len(matched) / len(model_prediction) if model_prediction else 0
+            recall = len(matched) / len(gpt_labeled) if gpt_labeled else 0
             f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0
 
             results.append({
                 "review_index": idx,
-                "Expert_Label": gpt_items,
-                "Model_Prediction":  model_items,
+                "Expert_Label": gpt_labeled,
+                "Model_Prediction":  model_prediction,
                 "matched": matched,
                 "unmatched": unmatched,
                 "sentiment_mismatches": sentiment_mismatches,
@@ -242,17 +242,32 @@ def col_to_list(df: pd.DataFrame, col_name: str) -> List[Dict]:
     return df[col_name].tolist()
     
     
+    
+    
 if __name__ == "__main__":
     
-    Challenger  =  ABSA_expert("Iceland/pyabsa-v3-onlyRest", "Iceland/pyabsa-v3-onlyRest") 
-    Challenger_df =  Challenger.analyze_dataset(benchmark_data, upload_to_mongo = False) 
+     
     model_name = "Iceland_pyabsa-v3-onlyRest"
     path = f'c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\data\\processed\\{model_name}_challenger_data.csv'
-    Challenger_df.to_csv(path, index=False)
     
+    
+    if os.path.exists(path):
+        print(f"📂 File found at {path}, loading existing data...")
+        Challenger_df = pd.read_csv(path)
+    else:
+        print(f"⚙️ No existing data found. Running ABSA model: {model_name}")
+        Challenger  =  ABSA_expert("Iceland/pyabsa-v3-onlyRest", "Iceland/pyabsa-v3-onlyRest")
+        Challenger_df =  Challenger.analyze_dataset(benchmark_data, upload_to_mongo = False)
+        Challenger_df.to_csv(path, index=False)
+         
+    Challenger_df["aspects"] = Challenger_df["aspects"].apply(lambda x: ast.literal_eval(x) if pd.notnull(x) else {})#needed otherwise it upload 'aspects' as strings     
     Challenger_list = col_to_list(Challenger_df, 'aspects')
+    
 
-    Labeled_df = pd.read_csv("c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\data\\processed\\labeled_data.csv")
+    if 'Labeled_df' in globals():
+        print(f'Labeled_df ready')
+    else:
+        Labeled_df = pd.read_csv("c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\data\\processed\\labeled_data.csv")
     Labeled_df["aspects"] = Labeled_df["aspects"].apply(lambda x: ast.literal_eval(x) if pd.notnull(x) else {})#needed otherwise it upload 'aspects' as strings
     Labeled_list = col_to_list(Labeled_df, 'aspects')
     
@@ -263,3 +278,4 @@ if __name__ == "__main__":
     
     Evaluator.save_evaluation_report(report_path,Eval_results )
     
+
