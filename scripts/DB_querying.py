@@ -62,6 +62,7 @@ class RestaurantRecommender:
       
       query = {}
       # Create one regex matcher per term (case-insensitive, substring match)
+      #PUO' ESSERE MIGLIORATO CONTROLLANDO PRIMA SE CI SONO ABBASTANZA MATCH ESATTI
       regex_filters = [
         {"aspect_keys": {"$elemMatch": {"$regex": term, "$options": "i"}}}
         for term in search_aspects] 
