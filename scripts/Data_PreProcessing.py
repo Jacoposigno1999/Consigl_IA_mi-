@@ -1,3 +1,8 @@
+#================================
+# This script take as input a Dataframe containing resturants reviews
+# and augment it with 2 columns [''] containg {aspect:polarity} dictionaries
+# and [''] containing a list with the aspects key
+#================================
 import  pandas as pd
 import os
 from langchain_ollama.llms import OllamaLLM
@@ -18,26 +23,26 @@ class ABSA_expert:
         
          # Prompt template for instruction-tuned models
         self.bos_instruction =  """Definition: The output will be the aspects (both implicit and explicit) and the aspects sentiment polarity. In cases where there are no aspects the output should be noaspectterm:none.
-                                    Positive example 1-
-                                    input: I charge it at night and skip taking the cord with me because of the good battery life.
-                                    output: battery life:positive, 
-                                    Positive example 2-
-                                    input: I even got my teenage son one, because of the features that it offers, like, iChat, Photobooth, garage band and more!.
-                                    output: features:positive, iChat:positive, Photobooth:positive, garage band:positive
-                                    Negative example 1-
-                                    input: Speaking of the browser, it too has problems.
-                                    output: browser:negative
-                                    Negative example 2-
-                                    input: The keyboard is too slick.
-                                    output: keyboard:negative
-                                    Neutral example 1-
-                                    input: I took it back for an Asus and same thing- blue screen which required me to remove the battery to reset.
-                                    output: battery:neutral
-                                    Neutral example 2-
-                                    input: Nightly my computer defrags itself and runs a virus scan.
-                                    output: virus scan:neutral
-                                    Now complete the following example-
-                                    input: """
+        Positive example 1-
+        input: With the great variety on the menu , I eat here often and never get bored.
+        output: menu:positive
+        Positive example 2- 
+        input: Great food, good size menu, great service and an unpretensious setting.
+        output: food:positive, menu:positive, service:positive, setting:positive
+        Negative example 1-
+        input: They did not have mayonnaise, forgot our toast, left out ingredients (ie cheese in an omelet), below hot temperatures and the bacon was so over cooked it crumbled on the plate when you touched it.
+        output: toast:negative, mayonnaise:negative, bacon:negative, ingredients:negative, plate:negative
+        Negative example 2-
+        input: The seats are uncomfortable if you are sitting against the wall on wooden benches.
+        output: seats:negative
+        Neutral example 1-
+        input: I asked for seltzer with lime, no ice.
+        output: seltzer with lime:neutral
+        Neutral example 2-
+        input: They wouldnt even let me finish my glass of wine before offering another.
+        output: glass of wine:neutral
+        Now complete the following example-
+        input:"""
         self.delim_instruct = ''
         self.eos_instruction = ' \noutput:'
         
@@ -67,7 +72,7 @@ class ABSA_expert:
     #PER ORA I DATI ARRIVANO DA EXCELL QUINDI LI CARICO COME UN PANDAS DF, SUCCESSIVAMENTE ARRIVERANNO DA UN MONGO-DB
     def analyze_dataset(self, df: pd.DataFrame, text_column: str = "review_full",
                         mongo_uri: str =  "mongodb://localhost:27017", db_name: str = "Reviews",
-                        collection_name: str = "Barcelona", batch_size: int = 5000,
+                        collection_name: str = "Barcelona", batch_size: int = 1000,
                         upload_to_mongo: bool = True) -> pd.DataFrame:
         
         if upload_to_mongo: 
@@ -80,7 +85,7 @@ class ABSA_expert:
         for idx, row in df.iterrows():
             review = row[text_column]
             aspects = self.analyze_review(review)
-            row_dict = row.to_dict()
+            row_dict = row.to_dict() #convert everything to a dict, since we want a json document to be loaded on MongoDB
             row_dict["aspects"] = aspects
             row_dict["aspect_keys"] = list(aspects.keys())
             buffer.append(row_dict)
@@ -118,7 +123,9 @@ if __name__ == "__main__":
     analyzer = ABSA_expert("Iceland/pyabsa-v3-onlyRest", "Iceland/pyabsa-v3-onlyRest")  
     path = "c:\\Users\\jacop\\Desktop\\Lavori\\Consigl_IA_mi-\\data\\raw\\Barcelona_reviews.csv"
     raw_data = pd.read_csv(path)
-    test_data = raw_data.head(100)
+    #Removing useless columns 
+    raw_data.drop('Unnamed: 0', axis = 1)
+    test_data = raw_data.head(10)
     df_with_aspects = analyzer.analyze_dataset(test_data)
 
 
