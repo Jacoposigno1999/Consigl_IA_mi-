@@ -8,6 +8,10 @@ from langchain.prompts import ChatPromptTemplate
 from typing import List, Dict, Any
 from collections import Counter
 from pymongo import MongoClient
+from bson import ObjectId
+
+
+
 
 class RestaurantRecommender:
     def __init__(self, db_name, collection_name, model_name):
@@ -141,6 +145,15 @@ class RestaurantRecommender:
       query = {"restaurant_name": {"$in": top_restaurants}}
       retrived_information = list(self.collection.find(query))
       print (f'Retrived {len(retrived_information)} reviews from the most relevant restaurants')
+      
+      #Convert the retrived json docs f to python dict
+      convert_reviews = []
+
+      for doc in retrived_information:
+          clean_doc = {k: str(v) if isinstance(v, ObjectId) else v for k, v in doc.items()}
+          convert_reviews.append(clean_doc)
+      
+      retrived_information = convert_reviews
 
       return retrived_information, top_restaurants
 
