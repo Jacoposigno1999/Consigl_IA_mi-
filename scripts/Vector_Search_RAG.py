@@ -71,6 +71,7 @@ class SemanticReviewSearcher:
         context = context[:max_chars]
 
         # Step 3: Define custom prompt
+        
         prompt_template  = PromptTemplate.from_template("""
             You are a food expert helping users find the best restaurants based on detailed customer reviews.
 
