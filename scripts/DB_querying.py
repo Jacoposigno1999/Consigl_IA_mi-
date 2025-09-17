@@ -1,3 +1,7 @@
+#==============================================================
+# This script is resposable of taking the user request and 
+# find the top k restaurants that match it and retrive all the reviews of the top reastaurants
+#============================================================== 
 import ast #for converting string into dict 
 from langchain_ollama.llms import OllamaLLM
 from langchain.prompts import ChatPromptTemplate
@@ -12,7 +16,7 @@ class RestaurantRecommender:
 
       # MongoDB setup
       try:
-          self.conn = MongoClient("localhost", 27017)  #client = MongoClient("mongodb://localhost:27017")
+          self.conn = MongoClient("localhost", 27017)  
           print("✅ MongoDB connected.")
       except Exception as e:
           raise ConnectionError(f"Could not connect to MongoDB: {e}")
@@ -23,7 +27,7 @@ class RestaurantRecommender:
         
     def parse_query(self, user_input: str) -> dict:
       #==========================================================================
-      # From user query to a dictionary with the information to look for in the DB
+      # From user query to a dictionary with the extracted information to look for in the DB
       #==========================================================================
       PROMPT_TEMPLATE = '''
             You are a NLP expert, your objective is to extract the main food item, special preferences, 
@@ -48,7 +52,7 @@ class RestaurantRecommender:
       output = self.model.invoke(prompt)
       return ast.literal_eval(output) #convert a string into a dict
       
-      
+     #method to create a query to retrive info from MongoDB 
     def build_mongo_query(self, parsed_info: Dict[str, List[str]]) -> Dict[str, Any]:
       
       # Merge all values from food_item, preferences, and aspects
@@ -76,7 +80,7 @@ class RestaurantRecommender:
       # Run it
       results = list(self.collection.find(mongo_query))
       if print_info: 
-        print(f"✅ Found {results.count_documents(mongo_query)} matching documents.")
+        print(f"✅ Found {len(results)} matching documents.")
         print("🔍 Showing up to 5 sample results:\n")
         for doc in results:
           print(f"🍽️ Restaurant: {doc.get('restaurant_name')}")
@@ -130,15 +134,15 @@ class RestaurantRecommender:
           return []
       
       # Extract only the restaurant names as a list of strings
-      restaurant_names = [rest["restaurant_name"] for rest in top_restaurants if "restaurant_name" in rest]
-      print(f'🏆 Top resturnats found: {restaurant_names}')
+      #restaurant_names = [rest["restaurant_name"] for rest in top_restaurants if "restaurant_name" in rest]
+      print(f'🏆 Top resturnats found: {top_restaurants}')
 
       # Build the MongoDB query
-      query = {"restaurant_name": {"$in": restaurant_names}}
+      query = {"restaurant_name": {"$in": top_restaurants}}
       retrived_information = list(self.collection.find(query))
       print (f'Retrived {len(retrived_information)} reviews from the most relevant restaurants')
 
-      return retrived_information, restaurant_names
+      return retrived_information, top_restaurants
 
 
 
